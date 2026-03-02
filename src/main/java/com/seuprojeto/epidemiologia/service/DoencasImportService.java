@@ -6,10 +6,13 @@ import com.seuprojeto.epidemiologia.repository.*;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
+import com.seuprojeto.epidemiologia.utils.BrasilConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
@@ -17,7 +20,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -35,18 +40,6 @@ public class DoencasImportService {
     private final IndicadorRepository indicadorRepository;
     private final PopulacaoEstadoRepository populacaoEstadoRepository;
 
-    private static final Map<String, String> IBGE_UF = Map.ofEntries(
-            Map.entry("11", "RO"), Map.entry("12", "AC"), Map.entry("13", "AM"),
-            Map.entry("14", "RR"), Map.entry("15", "PA"), Map.entry("16", "AP"),
-            Map.entry("17", "TO"), Map.entry("21", "MA"), Map.entry("22", "PI"),
-            Map.entry("23", "CE"), Map.entry("24", "RN"), Map.entry("25", "PB"),
-            Map.entry("26", "PE"), Map.entry("27", "AL"), Map.entry("28", "SE"),
-            Map.entry("29", "BA"), Map.entry("31", "MG"), Map.entry("32", "ES"),
-            Map.entry("33", "RJ"), Map.entry("35", "SP"), Map.entry("41", "PR"),
-            Map.entry("42", "SC"), Map.entry("43", "RS"), Map.entry("50", "MS"),
-            Map.entry("51", "MT"), Map.entry("52", "GO"), Map.entry("53", "DF")
-    );
-
     public DoencasImportService(EstadoRepository estadoRepository,
                                 DoencaRepository doencaRepository,
                                 IndicadorRepository indicadorRepository,
@@ -56,30 +49,73 @@ public class DoencasImportService {
         this.indicadorRepository = indicadorRepository;
         this.populacaoEstadoRepository = populacaoEstadoRepository;
     }
-
+    @Async
     public void importarCsvDoencaAno(int ano, String doenca) throws Exception {
         DoencaFonte fonte = DoencaFonte.fromNome(doenca);
-
         String url = fonte.getBaseUrl() + String.valueOf(ano).substring(2) + ".csv.zip";
-        logger.info("Baixando CSV: {}", url);
 
-        HttpClient client = HttpClient.newHttpClient();
+        logger.info("Iniciando download do CSV. Doença: {}, Ano: {}, URL: {}",
+                fonte.getNome(), ano, url);
+
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();
 
-        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try {
+            HttpResponse<InputStream> response = client.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
 
-        try (ZipInputStream zipInputStream = new ZipInputStream(response.body())) {
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
-                if (entry.getName().endsWith(".csv")) {
-                    processarCsv(zipInputStream, ano, fonte.getNome());
+            if (response.statusCode() != 200) {
+                throw new RuntimeException(
+                        "Erro ao consumir API. Status HTTP: " + response.statusCode());
+            }
+
+            boolean csvEncontrado = false;
+
+            try (ZipInputStream zipInputStream =
+                         new ZipInputStream(response.body())) {
+
+                ZipEntry entry;
+                while ((entry = zipInputStream.getNextEntry()) != null) {
+
+                    if (!entry.isDirectory() && entry.getName().endsWith(".csv")) {
+                        csvEncontrado = true;
+                        processarCsv(zipInputStream, ano, fonte.getNome());
+                    }
+
+                    zipInputStream.closeEntry();
                 }
             }
+
+            if (!csvEncontrado) {
+                throw new RuntimeException(
+                        "Nenhum arquivo CSV encontrado no ZIP para " + fonte.getNome() + " - " + ano);
+            }
+
+            logger.info("Importação finalizada com sucesso. Doença: {}, Ano: {}",
+                    fonte.getNome(), ano);
+
+        } catch (HttpTimeoutException e) {
+            logger.error("Timeout ao acessar API: {}", url, e);
+            throw new RuntimeException("Timeout ao acessar fonte externa", e);
+
+        } catch (IOException e) {
+            logger.error("Erro de IO ao processar arquivo ZIP: {}", url, e);
+            throw new RuntimeException("Erro ao processar arquivo da API", e);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Thread interrompida durante requisição HTTP", e);
+            throw new RuntimeException("Execução interrompida", e);
         }
     }
+
 
     private void processarCsv(InputStream inputStream, int ano, String doenca) throws Exception {
         CSVReader reader = new CSVReaderBuilder(
@@ -103,7 +139,7 @@ public class DoencasImportService {
 
         while ((colunas = reader.readNext()) != null) {
             String ufCodigo = getColuna(colunas, idx, "SG_UF_NOT");
-            String uf = (ufCodigo != null) ? IBGE_UF.getOrDefault(ufCodigo, "??") : null;
+            String uf = BrasilConstants.getSiglaPorCodigo(ufCodigo);
             String data = getColuna(colunas, idx, "DT_NOTIFIC");
             String evolucao = getColuna(colunas, idx, "EVOLUCAO");
             String dtObito = getColuna(colunas, idx, "DT_OBITO");
