@@ -43,4 +43,23 @@ public interface IndicadorRepository extends JpaRepository<Indicador, Integer> {
             Integer ano,
             Integer mes
     );
+    @Query(
+            value = """
+            SELECT i.ano,
+                   SUM(i.casos),
+                   (SUM(i.casos)::numeric / MAX(pe.populacao)::numeric) * 100000 AS taxaPor100k
+            FROM indicadores i
+            JOIN populacao_estado pe 
+                 ON pe.estado_id = i.estado_id 
+                AND pe.ano = i.ano
+            WHERE i.estado_id = :estadoId
+              AND i.doenca_id = :doencaId
+            GROUP BY i.ano
+            ORDER BY i.ano ASC
+    """,
+            nativeQuery = true)
+    List<Object[]> buscarSerieTemporal(
+            @Param("estadoId") Integer estadoId,
+            @Param("doencaId") Integer doencaId
+    );
 }

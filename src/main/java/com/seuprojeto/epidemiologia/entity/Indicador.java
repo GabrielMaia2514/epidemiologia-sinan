@@ -42,7 +42,7 @@ public class Indicador {
     private Integer obitos;
 
     @Column(precision = 10, scale = 4)
-    private BigDecimal taxaPor100k;
+        private BigDecimal taxaPor100k;
 
     public Integer getId() {
         return id;
