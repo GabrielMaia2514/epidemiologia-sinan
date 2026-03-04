@@ -54,7 +54,7 @@ public class AnaliseService {
     }
 
     private Doenca buscarDoenca(String nomeDoenca) {
-        return doencaRepository.findByNome(nomeDoenca.trim())
+        return doencaRepository.findByNome(nomeDoenca.trim().toLowerCase())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Doença não encontrada: " + nomeDoenca));
     }
 
@@ -110,7 +110,6 @@ public class AnaliseService {
         for (int i = 1; i < serieTemporal.size(); i++) {
             SerieTemporalDTO anterior = serieTemporal.get(i - 1);
             SerieTemporalDTO atual = serieTemporal.get(i);
-
             if (anterior.getTotalCasos() > 0) {
                 BigDecimal crescimentoPercentual =
                         BigDecimal.valueOf(atual.getTotalCasos() - anterior.getTotalCasos())

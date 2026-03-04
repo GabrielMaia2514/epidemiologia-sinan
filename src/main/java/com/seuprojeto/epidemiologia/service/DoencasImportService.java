@@ -53,7 +53,6 @@ public class DoencasImportService {
     public void importarCsvDoencaAno(int ano, String doenca) throws Exception {
         DoencaFonte fonte = DoencaFonte.fromNome(doenca);
         String url = fonte.getBaseUrl() + String.valueOf(ano).substring(2) + ".csv.zip";
-
         logger.info("Iniciando download do CSV. Doença: {}, Ano: {}, URL: {}",
                 fonte.getNome(), ano, url);
 
