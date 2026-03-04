@@ -110,6 +110,14 @@ Valores nulos
 Listas vazias
 Garantindo sempre respostas consistentes e seguras.
 
+### ✅ Testes
+O projeto inclui testes unitários com JUnit 5 e Mockito, cobrindo:
+- Cenários sem dados (listas vazias).
+- Cenários com dados (cálculo correto dos indicadores).
+- Casos de erro (estado ou doença não encontrados).
+- Limites (apenas um ano de dados).
+
+
 ### 🧪 Como Executar o Projeto
 Pré-requisitos
 
