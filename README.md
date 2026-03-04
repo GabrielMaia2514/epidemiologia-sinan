@@ -1,4 +1,4 @@
-# 📊 Epidemiologia SINAN - API Analítica
+# 📊 Epidemiologia SINAN(Sistema de Informação de Agravos de Notificação) - API Analítica
 
 API REST desenvolvida em Java com Spring Boot para análise epidemiológica
 com base em dados públicos do SINAN (Sistema de Informação de Agravos de Notificação).
